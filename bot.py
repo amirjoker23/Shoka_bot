@@ -1,82 +1,170 @@
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+import os
+from telegram import Update, ReplyKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ConversationHandler, filters, ContextTypes
 
 TOKEN = "7666433350:AAEtnztPRm2s4olljqaOLiSl0Lyr08u9Y-o"
-ADMIN_ID = 1571446410
 
-questions = [
-    "👤 نام و نام خانوادگی:",
-    "📞 شماره تماس:",
-    "🆔 کد ملی:",
-    "💍 وضعیت تأهل:",
-    "📍 آدرس و تاریخ تولد:",
-    "💼 شغل:",
-    "📮 کد پستی:",
-    "👥 کد ملی ذینفع در صورت فوت:",
-    "🎂 تاریخ تولد ذینفع:",
-    "📌 طرح مورد نظر:"
-]
-
-button_options = {
-    3: [["مجرد", "متأهل"]],
-    9: [["ماهانه", "سالانه", "یکجا"]],
-}
-
-user_data = {}
+# مراحل گفتگو
+(NAME, PHONE, NATIONAL_ID, MARITAL, ADDRESS, BIRTHDAY, JOB, POSTAL, BENEFICIARY_ID, BENEFICIARY_BIRTHDAY) = range(10)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.chat_id
-    user_data[user_id] = {"step": 0, "answers": []}
-    await send_question(update, context, user_id)
+    await update.message.reply_text(
+        "🎉 به بیمه سرمایه‌گذاری شوکا خوش اومدین!\n\nبرای ثبت اطلاعات، لطفا سوالات بعدی رو جواب بدین."
+    )
+    await update.message.reply_text("👤 لطفا نام و نام خانوادگی خود را وارد کنید:")
+    return NAME
 
-async def handle_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.chat_id
-    message = update.message.text.strip()
+async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['name'] = update.message.text
+    await update.message.reply_text("📱 لطفا شماره تماس خود را وارد کنید:")
+    return PHONE
 
-    if user_id not in user_data:
-        await update.message.reply_text("لطفاً اول /start رو بزن.")
-        return
+async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['phone'] = update.message.text
+    await update.message.reply_text("🆔 لطفا کد ملی خود را وارد کنید:")
+    return NATIONAL_ID
 
-    state = user_data[user_id]
-    step = state["step"]
+async def get_national_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['national_id'] = update.message.text
+    keyboard = [['متاهل', 'مجرد']]
+    await update.message.reply_text(
+        "💍 وضعیت تاهل خود را انتخاب کنید:",
+        reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+    )
+    return MARITAL
 
-    state["answers"].append(message)
-    state["step"] += 1
+async def get_marital(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['marital'] = update.message.text
+    await update.message.reply_text("📍 لطفا آدرس محل سکونت خود را وارد کنید:")
+    return ADDRESS
 
-    if state["step"] < len(questions):
-        await send_question(update, context, user_id)
-    else:
-        summary = "\n".join([f"{i+1}. {questions[i]} {ans}" for i, ans in enumerate(state["answers"])])
-        
-        # برای کاربر
-        await update.message.reply_text(
-            "✅ اطلاعات شما با موفقیت ثبت شد:\n\n"
-            + summary
-            + "\n\n🧾 لینک پرداخت به زودی از طرف شرکت برای شما ارسال خواهد شد.",
-            reply_markup=ReplyKeyboardRemove()
-        )
+async def get_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['address'] = update.message.text
+    await update.message.reply_text("📅 لطفا تاریخ تولد خود را وارد کنید (مثال: 1370/01/15):")
+    return BIRTHDAY
 
-        # برای ادمین
-        await context.bot.send_message(chat_id=ADMIN_ID, text=f"📥 فرم جدید ثبت شد:\n\n{summary}")
+async def get_birthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['birthday'] = update.message.text
+    await update.message.reply_text("💼 شغل شما چیست؟")
+    return JOB
 
-        del user_data[user_id]
+async def get_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['job'] = update.message.text
+    await update.message.reply_text("🏷️ لطفا کد پستی خود را وارد کنید:")
+    return POSTAL
 
-async def send_question(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id):
-    step = user_data[user_id]["step"]
-    question = questions[step]
+async def get_postal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['postal'] = update.message.text
+    await update.message.reply_text("👥 لطفا کد ملی ذینفع در صورت فوت را وارد کنید:")
+    return BENEFICIARY_ID
 
-    if step in button_options:
-        reply_markup = ReplyKeyboardMarkup(button_options[step], one_time_keyboard=True, resize_keyboard=True)
-    else:
-        reply_markup = ReplyKeyboardRemove()
+async def get_beneficiary_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['beneficiary_id'] = update.message.text
+    await update.message.reply_text("📅 لطفا تاریخ تولد ذینفع را وارد کنید (مثال: 1375/03/22):")
+    return BENEFICIARY_BIRTHDAY
 
-    await context.bot.send_message(chat_id=user_id, text=question, reply_markup=reply_markup)
+async def get_beneficiary_birthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['beneficiary_birthday'] = update.message.text
 
-# اجرا
-app = ApplicationBuilder().token(TOKEN).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_response))
+    # خلاصه اطلاعات برای ادمین
+    summary = "\n".join([f"{key}: {value}" for key, value in context.user_data.items()])
+    admin_id = 1571446410  # آیدی عددی خودت رو اینجا گذاشتی
+
+    await context.bot.send_message(chat_id=admin_id, text=f"فرم جدید دریافت شد:\n{summary}")
+
+    await update.message.reply_text("✅ ثبت اطلاعات با موفقیت انجام شد.\nبه زودی لینک پرداخت از طرف شرکت برای شما ارسال می‌شود.")
+    return ConversationHandler.END
+
+if name == "__main__":
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
+            PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)],
+    import os
+from telegram import Update, ReplyKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ConversationHandler, filters, ContextTypes
+
+TOKEN = os.getenv("TOKEN")  # از محیط Render می‌خونه
+
+# مراحل گفتگو
+(NAME, PHONE, NATIONAL_ID, MARITAL, ADDRESS, BIRTHDAY, JOB, POSTAL, BENEFICIARY_ID, BENEFICIARY_BIRTHDAY) = range(10)
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🎉 به بیمه سرمایه‌گذاری شوکا خوش اومدین!\n\nبرای ثبت اطلاعات، لطفا سوالات بعدی رو جواب بدین."
+    )
+    await update.message.reply_text("👤 لطفا نام و نام خانوادگی خود را وارد کنید:")
+    return NAME
+
+async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['name'] = update.message.text
+    await update.message.reply_text("📱 لطفا شماره تماس خود را وارد کنید:")
+    return PHONE
+
+async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['phone'] = update.message.text
+    await update.message.reply_text("🆔 لطفا کد ملی خود را وارد کنید:")
+    return NATIONAL_ID
+
+async def get_national_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['national_id'] = update.message.text
+    keyboard = [['متاهل', 'مجرد']]
+    await update.message.reply_text(
+        "💍 وضعیت تاهل خود را انتخاب کنید:",
+        reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+    )
+    return MARITAL
+
+async def get_marital(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['marital'] = update.message.text
+    await update.message.reply_text("📍 لطفا آدرس محل سکونت خود را وارد کنید:")
+    return ADDRESS
+
+async def get_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['address'] = update.message.text
+    await update.message.reply_text("📅 لطفا تاریخ تولد خود را وارد کنید (مثال: 1370/01/15):")
+    return BIRTHDAY
+
+async def get_birthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['birthday'] = update.message.text
+    await update.message.reply_text("💼 شغل شما چیست؟")
+    return JOB
+
+async def get_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['job'] = update.message.text
+    await update.message.reply_text("🏷️ لطفا کد پستی خود را وارد کنید:")
+    return POSTAL
+
+async def get_postal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['postal'] = update.message.text
+    await update.message.reply_text("👥 لطفا کد ملی ذینفع در صورت فوت را وارد کنید:")
+    return BENEFICIARY_ID
+
+async def get_beneficiary_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['beneficiary_id'] = update.message.text
+    await update.message.reply_text("📅 لطفا تاریخ تولد ذینفع را وارد کنید (مثال: 1375/03/22):")
+    return BENEFICIARY_BIRTHDAY
+
+async def get_beneficiary_birthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['beneficiary_birthday'] = update.message.text
+
+    # خلاصه اطلاعات برای ادمین
+    summary = "\n".join([f"{key}: {value}" for key, value in context.user_data.items()])
+    admin_id = 1571446410  # آیدی عددی خودت رو اینجا گذاشتی
+
+    await context.bot.send_message(chat_id=admin_id, text=f"فرم جدید دریافت شد:\n{summary}")
+
+    await update.message.reply_text("✅ ثبت اطلاعات با موفقیت انجام شد.\nبه زودی لینک پرداخت از طرف شرکت برای شما ارسال می‌شود.")
+    return ConversationHandler.END
 
 if __name__ == "__main__":
-    print("✅ ربات آماده‌ست.")
-    app.run_polling()
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
+            PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)],
